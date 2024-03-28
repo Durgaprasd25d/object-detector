@@ -1,4 +1,4 @@
-"use client";
+"use client"
 import React, { useEffect, useRef, useState } from "react";
 import Webcam from "react-webcam";
 import { load as cocoSsdLoad } from "@tensorflow-models/coco-ssd";
@@ -10,6 +10,8 @@ const ObjectDetection = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [net, setNet] = useState(null);
     let detectInterval = null;
+    let audioTimeout = null;
+    const [audioPlayer, setAudioPlayer] = useState(null); // State to hold the audio player reference
 
     const runCoco = async () => {
         setIsLoading(true);
@@ -23,42 +25,61 @@ const ObjectDetection = () => {
         }
     };
 
-    const renderDetection = (ctx, detection) => {
-        // Get bounding box coordinates
-        const [x, y, width, height] = detection.bbox;
+    const renderDetection = (ctx, detections) => {
+        const isPersonDetected = detections.some(detection => detection.class === 'person');
+        console.log('Is person detected:', isPersonDetected);
     
-        // Draw bounding box
-        ctx.strokeStyle = "#ff0000"; // Red color
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x, y, width, height);
+        if (isPersonDetected) {
+            if (!audioPlayer || audioPlayer.paused) {
+                console.log('Playing audio');
+                playAudio();
+            }
+        } else {
+            if (audioPlayer && !audioPlayer.paused) {
+                console.log('Stopping audio');
+                stopAudio();
+            }
+        }
     
-        // Display class and score
-        ctx.fillStyle = "#ffffff"; // White color
-        ctx.font = "16px Arial";
-        ctx.fillText(`Class: ${detection.class}`, x, y - 10);
-        ctx.fillText(`Score: ${detection.score.toFixed(2)}`, x, y - 30);
+        detections.forEach(detection => {
+            const [x, y, width, height] = detection.bbox;
+            ctx.strokeStyle = "#ff0000";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "16px Arial";
+            ctx.fillText(`Class: ${detection.class}`, x, y - 10);
+            ctx.fillText(`Score: ${detection.score.toFixed(2)}`, x, y - 30);
+        });
+    };
+
+    const playAudio = () => {
+        const audio = new Audio('/person_audio.mp3');
+        audio.play();
+        setAudioPlayer(audio);
     };
     
+    const stopAudio = () => {
+        if (audioPlayer) {
+            console.log('Stopping audio');
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+            setAudioPlayer(null); // Reset audio player reference
+        }
+    };
+
     const runObjectDetection = async () => {
         if (canvasRef.current && webcamRef.current !== null && webcamRef.current.video?.readyState === 4) {
             const video = webcamRef.current.video;
             const canvas = canvasRef.current;
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            
             const ctx = canvas.getContext("2d");
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            // Find all detections
             const detectedObjects = await net.detect(canvas);
-            
-            // Render each detection
-            detectedObjects.forEach(detection => {
-                renderDetection(ctx, detection);
-            });
+            renderDetection(ctx, detectedObjects);
         }
     };
-    
 
     const showMyVideo = () => {
         if (webcamRef.current !== null && webcamRef.current.video?.readyState === 4) {
@@ -75,9 +96,9 @@ const ObjectDetection = () => {
 
     useEffect(() => {
         showMyVideo();
-        // Clear interval on component unmount
         return () => {
             clearInterval(detectInterval);
+            stopAudio(); // Ensure audio is stopped when component unmounts
         };
     }, [webcamRef.current]);
 
@@ -96,7 +117,6 @@ const ObjectDetection = () => {
             ) : (
                 <div className="relative flex justify-center items-center p-1.5 rounded-md">
                     <Webcam className="rounded-md w-full lg:h-[720px]" muted ref={webcamRef} />
-                    {/* Add the canvas component here */}
                     <canvas ref={canvasRef} className="absolute top-0 left-0 z-99999 w-full lg:h-[720px]"></canvas>
                 </div>
             )}
@@ -105,4 +125,3 @@ const ObjectDetection = () => {
 };
 
 export default ObjectDetection;
- 
